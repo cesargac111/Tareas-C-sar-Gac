@@ -1,0 +1,126 @@
+---
+jupyter: python3
+---
+
+##Tarea 9.1
+Modifique los métodos rkf y rk4 introducidos para imprimir el número de evaluaciones. Resuelva el problema de valor inicial
+$$y'(t) = te^{3t} - 2y, \quad 0 \leq t \leq 1, \quad y(0) = 0$$cuya solución exacta es $y(t) = \frac{1}{5}te^{3t} - \frac{1}{25}e^{3t} + \frac{1}{25}e^{-2t}$.
+ Obtenga un error similar (y menor a $10^{-6}$) con ambos métodos y compare el número de evaluaciones. Discuta cuál es preferible y por qué.
+
+```{python}
+#| colab: {base_uri: https://localhost:8080/}
+import numpy as np
+
+
+def f(t, y):
+    return t * np.exp(3 * t) - 2 * y
+
+def sol_exacta(t):
+    return (1/5) * t * np.exp(3 * t) - (1/25) * np.exp(3 * t) + (1/25) * np.exp(-2 * t)
+
+
+# Contador global de evaluaciones de f(t, y), asi puedo saber el numero de evaluaciones
+evaluaciones_f = 0
+
+def rk4_mod(f, t0, y0, T, N):
+    global evaluaciones_f
+    evaluaciones_f = 0
+    h = (T - t0) / N
+    t = t0
+    y = y0
+
+    for _ in range(N):
+        k1 = f(t, y)
+        k2 = f(t + h/2, y + h/2 * k1)
+        k3 = f(t + h/2, y + h/2 * k2)
+        k4 = f(t + h, y + h * k3)
+
+        evaluaciones_f += 4
+
+        y = y + h/6 * (k1 + 2*k2 + 2*k3 + k4)
+        t = t + h
+
+    return y, evaluaciones_f
+
+def rkf45_mod(f, t0, y0, T, tol):
+    global evaluaciones_f
+    evaluaciones_f = 0
+    t = t0
+    y = y0
+    h = 0.01
+    while t < T:
+        h_actual = min(h, T - t)
+
+        k1 = f(t, y)
+        k2 = f(t + 1/4 * h_actual, y + 1/4 * h_actual * k1)
+        k3 = f(t + 3/8 * h_actual, y + h_actual * (3/32 * k1 + 9/32 * k2))
+        k4 = f(t + 12/13 * h_actual, y + h_actual * (1932/2197 * k1 - 7200/2197 * k2 + 7296/2197 * k3))
+        k5 = f(t + h_actual, y + h_actual * (439/216 * k1 - 8 * k2 + 3680/513 * k3 - 845/4104 * k4))
+        k6 = f(t + 1/2 * h_actual, y + h_actual * (-8/27 * k1 + 2 * k2 - 3544/2565 * k3 + 1859/4104 * k4 - 11/40 * k5))
+
+        evaluaciones_f += 6
+
+        y_nuevo = y + h_actual * (16/135 * k1 + 6656/12825 * k3 + 28561/56430 * k4 - 9/50 * k5 + 2/55 * k6)
+        y_hat = y + h_actual * (25/216 * k1 + 1408/2565 * k3 + 2197/4104 * k4 - 1/5 * k5)
+
+        error_estimado = np.abs(y_nuevo - y_hat)
+
+        if error_estimado == 0:
+            s = 4
+        else:
+            s = 0.84 * (tol / error_estimado)**(1/5)
+
+        if error_estimado <= tol:
+            t = t + h_actual
+            y = y_nuevo
+
+        # Ajusto el tamaño de paso para el siguiente paso
+        h = h_actual * s
+        h = np.clip(h, 1e-6, 0.1) # Limito h para evitar problemas
+
+    return y, evaluaciones_f
+
+
+T_final = 1.0
+t_inicial = 0.0
+y_inicial = 0.0
+tol_deseada = 1e-6
+y_exacta_final = sol_exacta(T_final)
+
+N_rk4 = 10000
+y_rk4, evals_rk4 = rk4_mod(f, t_inicial, y_inicial, T_final, N_rk4)
+error_rk4 = np.abs(y_rk4 - y_exacta_final)
+
+# Busco un N para que el error sea < 1e-6. Si el error es mayor, aumento N.
+if error_rk4 > tol_deseada:
+    N_rk4 = 20000
+    y_rk4, evals_rk4 = rk4_mod(f, t_inicial, y_inicial, T_final, N_rk4)
+    error_rk4 = np.abs(y_rk4 - y_exacta_final)
+
+y_rkf45, evals_rkf45 = rkf45_mod(f, t_inicial, y_inicial, T_final, tol_deseada)
+error_rkf45 = np.abs(y_rkf45 - y_exacta_final)
+
+print("\n" + "="*50)
+print(f"| {'RK4 y RKF45 para y\' = t*exp(3t) - 2y':^46} |")
+print("="*50)
+print(f"Solución exacta en t=1: {y_exacta_final:.10f}")
+print(f"Tolerancia deseada: < {tol_deseada}")
+print("---")
+
+print(f"--- Resultados de RK4 (N={N_rk4}) ---")
+print(f"Aproximación en t=1: {y_rk4:.10f}")
+print(f"Error absoluto: {error_rk4:.10f}")
+print(f"Número de evaluaciones de f: {evals_rk4}")
+print("---")
+
+print(f"--- Resultados de RKf45 (TOL={tol_deseada}) ---")
+print(f"Aproximación en t=1: {y_rkf45:.10f}")
+print(f"Error absoluto: {error_rkf45:.10f}")
+print(f"Número de evaluaciones de f: {evals_rkf45}")
+print("="*50)
+```
+
+A pesar de que RK4 tenga una increible presición, utiliza una cantidad absurdamente mayor de evaluaciones que RKf45. Ademas el orden de error de RKf45 es de $10^{-6}$, lo que es un error bajisimo.
+Por esto mismo, prefiero el metodo Ruguen-Kutta-Fehlberg, utiliza MUCHO menos evaluaciones y tiene un error, que si bien no es perfecto, es minimo.
+
+## Nota: 7.0
